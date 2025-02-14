@@ -1,5 +1,6 @@
 pluginManagement {
     repositories {
+
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
@@ -16,9 +17,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://devrepo.kakao.com/nexus/repository/kakaomap-releases/")
+        }
     }
 }
 
 rootProject.name = "MedicalConnect"
 include(":app")
- 

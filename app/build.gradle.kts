@@ -14,7 +14,6 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -41,16 +40,21 @@ android {
 
 dependencies {
 
+    // KakaoMap
+    implementation("com.kakao.maps.open:android:2.12.8")
+    implementation("com.google.android.gms:play-services-location:21.1.0")
     // CameraX
-    implementation("androidx.camera:camera-core:1.4.1")
-    implementation("androidx.camera:camera-camera2:1.4.1")
-    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
     implementation("androidx.camera:camera-view:1.4.1")
     implementation("androidx.camera:camera-extensions:1.4.1")
     implementation("androidx.camera:camera-effects:1.4.1")
 
     // text recognition
     implementation("com.google.android.gms:play-services-mlkit-text-recognition-korean:16.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")
+    implementation("com.google.mlkit:language-id:16.0.0")
 
     // translation
     implementation("com.google.mlkit:translate:17.0.3")
@@ -61,6 +65,7 @@ dependencies {
 
     // Timber
     implementation(libs.timber)
+    implementation(libs.timber.v471)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
@@ -68,6 +73,7 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.firebase.common.ktx)
+    implementation(libs.play.services.maps)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

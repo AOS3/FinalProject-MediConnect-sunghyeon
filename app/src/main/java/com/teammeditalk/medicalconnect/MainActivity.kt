@@ -2,30 +2,27 @@ package com.teammeditalk.medicalconnect
 
 import android.Manifest
 import android.content.ContentValues
-import android.content.Context
 import android.content.pm.PackageManager
-import android.hardware.camera2.CameraManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.Camera
+import androidx.camera.core.AspectRatio
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.video.Recorder
-import androidx.camera.video.Recording
-import androidx.camera.video.VideoCapture
-import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import com.teammeditalk.medicalconnect.databinding.ActivityMainBinding
@@ -39,25 +36,15 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeoutException
 
 class MainActivity : AppCompatActivity() {
-    private var camera: Camera? = null
-    private var cameraProvider: ProcessCameraProvider? = null
-
     private lateinit var viewBinding: ActivityMainBinding
-    private lateinit var cameraPreview: PreviewView
-    private var imageCapture: ImageCapture? = null
-    private var videoCapture: VideoCapture<Recorder>? = null
-    private var recording: Recording? = null
-
-    private val cameraManager by lazy {
-        getSystemService(Context.CAMERA_SERVICE) as CameraManager
-    }
+    private lateinit var imageCapture: ImageCapture
 
     private lateinit var cameraExecutor: ExecutorService
 
+    // 텍스트 인식 시작
     val recognizer = TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
 
     // 권한 확인
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String>,
@@ -99,7 +86,6 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        // TextRecognizer 인스턴스 만들기
         // 입력 이미지 준비
         if (allPermissionsGranted()) {
             startCamera()
@@ -116,11 +102,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun takePhoto() {
-        val imageCapture = imageCapture ?: return
-
         val name =
-            SimpleDateFormat(FILENAME_FORMAT, Locale.US)
+            SimpleDateFormat(FILENAME_FORMAT, Locale.KOREA)
                 .format(System.currentTimeMillis())
+
         val contentValues =
             ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -140,9 +125,16 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    val msg = "Photo capture succeeded: ${outputFileResults.savedUri}"
-                    Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
-                    Timber.d(msg)
+                    try {
+                        Timber.d("image saved :${outputFileResults.savedUri}")
+                        if (outputFileResults.savedUri != null) {
+                            getImage(outputFileResults.savedUri!!)
+                        } else {
+                            Timber.d("save Uri is null")
+                        }
+                    } catch (e: Exception) {
+                        Timber.e("URI 생성 실패: ${e.message}")
+                    }
                 }
 
                 override fun onError(exception: ImageCaptureException) {
@@ -150,6 +142,30 @@ class MainActivity : AppCompatActivity() {
                 }
             },
         )
+    }
+
+    private fun getImage(uri: Uri) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, uri)
+                val image = InputImage.fromBitmap(bitmap, 0)
+                recognizeText(image)
+            } catch (e: Exception) {
+                Timber.d("이미지 처리 실패 :${e.message}")
+            }
+        }
+    }
+
+    private fun recognizeText(image: InputImage) {
+        lifecycleScope.launch(Dispatchers.Main) {
+            recognizer
+                .process(image)
+                .addOnSuccessListener {
+                    Timber.d("success recognize :$it")
+                }.addOnFailureListener {
+                    Timber.d("failed recognize :${it.message}")
+                }
+        }
     }
 
     private fun captureVideo() {}
@@ -168,6 +184,21 @@ class MainActivity : AppCompatActivity() {
                             .also {
                                 it.surfaceProvider = viewBinding.viewFinder.surfaceProvider
                             }
+
+                    imageCapture =
+                        ImageCapture
+                            .Builder()
+                            .setTargetAspectRatio(AspectRatio.RATIO_4_3)
+                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY) // 지연 시간 최소화
+                            .setTargetRotation(viewBinding.viewFinder.display.rotation)
+                            .build()
+
+                    val imageAnalyzer =
+                        ImageAnalysis
+                            .Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
+
                     val cameraSelector =
                         CameraSelector.DEFAULT_BACK_CAMERA
 
@@ -177,6 +208,7 @@ class MainActivity : AppCompatActivity() {
                             this@MainActivity,
                             cameraSelector,
                             preview,
+                            imageCapture,
                         )
                     } catch (e: Exception) {
                         Timber.d("use case binding failed :$e")
@@ -193,6 +225,11 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        recognizer.close()
     }
 
     companion object {
